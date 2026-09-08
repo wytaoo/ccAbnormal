@@ -1321,6 +1321,33 @@
       font-size: 16px;
     }
     .solution-section { margin-bottom: 16px; }
+    /* 新地址重派时长表单：异常单信息 + 解决方案选项固定，仅下方详情面板滚动 */
+    .modal-overlay.scroll-split .solution-body {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      padding-right: 4px;
+    }
+    .modal-overlay.scroll-split .solution-body > .solution-section:first-child {
+      flex: 0 0 auto;
+    }
+    .modal-overlay.scroll-split .solution-body > .solution-section:nth-child(2) {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .modal-overlay.scroll-split .solution-body > .solution-section:nth-child(2) .solution-section-title,
+    .modal-overlay.scroll-split .solution-body > .solution-section:nth-child(2) .solution-options {
+      flex: 0 0 auto;
+    }
+    .modal-overlay.scroll-split .solution-panels {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      padding-right: 8px;
+    }
     .solution-section-title {
       font-size: 14px;
       font-weight: 600;
@@ -1620,7 +1647,7 @@
       margin-top: 14px;
     }
     .solution-addr-wrap.show { display: block; }
-    .solution-addr-block { margin-bottom: 8px; }
+    .solution-addr-block { margin: 12px 0; }
     .solution-addr-block-title {
       font-size: 13px;
       font-weight: 600;
@@ -1646,6 +1673,14 @@
     .solution-addr-box .i-state   { grid-area: state; }
     .solution-addr-box .i-city    { grid-area: city; }
     .solution-addr-box .i-addr    { grid-area: addr; }
+    .solution-addr-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #1a2232;
+      margin: 12px 0 8px;
+      padding-left: 8px;
+      line-height: 1.4;
+    }
     .solution-addr-wrap .solution-info-item {
       border-bottom: none;
       padding: 4px 0;
@@ -1912,6 +1947,43 @@
       .modal-nav { width: 32px; height: 32px; font-size: 13px; }
       .modal-thumb { width: 44px; height: 44px; }
       .modal-header h2 { font-size: 15px; }
+    }
+
+    /* ---------- Toast 提示 ---------- */
+    .toast {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #16a34a;
+      color: #ffffff;
+      font-size: 14px;
+      padding: 12px 22px;
+      border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(22, 163, 74, 0.32);
+      z-index: 99999;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.25s ease, transform 0.25s ease;
+      transform: translate(-50%, -50%) scale(0.9);
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+    }
+    .toast-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      flex-shrink: 0;
+    }
+    .toast-icon svg {
+      width: 18px;
+      height: 18px;
     }
   </style>
 </head>
@@ -2318,12 +2390,14 @@
       let orderTotalItemsGlobal = 0;
       let selectedOrderIdsGlobal = new Set();
       let solutionModalInstance = null;
+      let solutionIsChangeGlobal = false;
       let recordModalInstance = null;
       let searchParams = { orderNos: '', startDate: '', endDate: '', createTimeStart: '', createTimeEnd: '' };
 
       // 全局暴露 openSolutionModal，确保 onclick 可以调用
       window.openSolutionModal = function(data, isChange) {
         if (!data) return;
+        solutionIsChangeGlobal = !!isChange;
         if (!solutionModalInstance) {
           createSolutionModal();
         }
@@ -2343,6 +2417,7 @@
         document.getElementById('solDeadlineTime').textContent = (data.deadlineTime || '').slice(0, 10) || '-';
         document.getElementById('solStatus').textContent = data.status || '-';
         document.getElementById('solWorkOrderNo').textContent = data.workOrderNo || '-';
+        document.getElementById('solDeliveryCount').textContent = (data.deliveryCount != null && data.deliveryCount !== '') ? data.deliveryCount : '-';
 
         // 解决方案默认不选中任何项
         const radios = document.querySelectorAll('input[name="solution"]');
@@ -2454,8 +2529,12 @@
         if (addrPanel) addrPanel.classList.toggle('show', val === '新地址重派');
         const addrTablePanel = document.getElementById('solAddrTablePanel');
         if (addrTablePanel) addrTablePanel.classList.toggle('show', val === '新地址重派');
-        // 再次派送 / 换单重派 / 新地址重派 时显示辅助派送
-        const showExtra = val === '再次派送' || val === '换单重派' || val === '新地址重派';
+        // 新地址重派时，固定上方信息、解决方案区域滚动
+        if (solutionModalInstance) {
+          solutionModalInstance.classList.toggle('scroll-split', val === '新地址重派');
+        }
+        // 仅 再次派送 时显示补充信息
+        const showExtra = val === '再次派送';
         if (extraPanel) extraPanel.classList.toggle('show', showExtra);
         // 离开补充场景时重置辅助派送
         if (!showExtra) {
@@ -2496,10 +2575,10 @@
         setOrig('solOrigCity', city);
         setOrig('solOrigPostcode', postcode);
         setOrig('solOrigAddress', street);
-        // 新派件信息（清空，用户填写）
+        // 新派件信息（清空，用户填写；国家默认 USA，可修改）
         setVal('solAddrName', '');
         setVal('solAddrPhone', '');
-        setVal('solAddrCountry', '');
+        setVal('solAddrCountry', 'USA');
         setVal('solAddrState', '');
         setVal('solAddrCity', '');
         setVal('solAddrPostcode', '');
@@ -2530,6 +2609,7 @@
                 <div class="solution-info-item"><span class="solution-label">截止时间</span><span class="solution-value" id="solDeadlineTime">-</span></div>
                 <div class="solution-info-item"><span class="solution-label">处理状态</span><span class="solution-value" id="solStatus">-</span></div>
                 <div class="solution-info-item"><span class="solution-label">工单号</span><span class="solution-value" id="solWorkOrderNo">-</span></div>
+                <div class="solution-info-item"><span class="solution-label">派送次数</span><span class="solution-value" id="solDeliveryCount">-</span></div>
               </div>
             </div>
 
@@ -2544,6 +2624,8 @@
                 <label class="solution-option"><input type="radio" name="solution" value="新地址重派"><span>新地址重派</span></label>
               </div>
 
+              <!-- 下方详情面板滚动区 -->
+              <div class="solution-panels">
               <!-- 换单重派操作区 -->
               <div class="solution-sub" id="solReroutePanel">
                 <div class="solution-sub-row">
@@ -2570,23 +2652,29 @@
 
               <!-- 新地址派送：派件信息对比（与顶部异常单信息同款样式） -->
               <div class="solution-addr-wrap" id="solAddrTablePanel">
-                <div class="solution-addr-block solution-addr-box">
-                  <div class="solution-info-item i-name"><span class="solution-label">姓名</span><span class="solution-value" id="solOrigName">-</span></div>
-                  <div class="solution-info-item i-phone"><span class="solution-label">电话</span><span class="solution-value" id="solOrigPhone">-</span></div>
-                  <div class="solution-info-item i-zip"><span class="solution-label">邮编</span><span class="solution-value" id="solOrigPostcode">-</span></div>
-                  <div class="solution-info-item i-country"><span class="solution-label">国家</span><span class="solution-value" id="solOrigCountry">-</span></div>
-                  <div class="solution-info-item i-state"><span class="solution-label">州/省</span><span class="solution-value" id="solOrigState">-</span></div>
-                  <div class="solution-info-item i-city"><span class="solution-label">城市</span><span class="solution-value" id="solOrigCity">-</span></div>
-                  <div class="solution-info-item i-addr"><span class="solution-label">地址</span><span class="solution-value" id="solOrigAddress">-</span></div>
+                <div class="solution-addr-block">
+                  <div class="solution-addr-title">原地址信息</div>
+                  <div class="solution-addr-box">
+                    <div class="solution-info-item i-name"><span class="solution-label">姓名</span><span class="solution-value" id="solOrigName">-</span></div>
+                    <div class="solution-info-item i-phone"><span class="solution-label">电话</span><span class="solution-value" id="solOrigPhone">-</span></div>
+                    <div class="solution-info-item i-zip"><span class="solution-label">邮编</span><span class="solution-value" id="solOrigPostcode">-</span></div>
+                    <div class="solution-info-item i-country"><span class="solution-label">国家</span><span class="solution-value" id="solOrigCountry">-</span></div>
+                    <div class="solution-info-item i-state"><span class="solution-label">州/省</span><span class="solution-value" id="solOrigState">-</span></div>
+                    <div class="solution-info-item i-city"><span class="solution-label">城市</span><span class="solution-value" id="solOrigCity">-</span></div>
+                    <div class="solution-info-item i-addr"><span class="solution-label">原地址</span><span class="solution-value" id="solOrigAddress">-</span></div>
+                  </div>
                 </div>
-                <div class="solution-addr-block solution-addr-new solution-addr-box">
-                  <div class="solution-info-item i-name"><span class="solution-label">姓名</span><input type="text" id="solAddrName" class="solution-addr-input" placeholder="姓名"></div>
-                  <div class="solution-info-item i-phone"><span class="solution-label">电话</span><input type="text" id="solAddrPhone" class="solution-addr-input" placeholder="电话"></div>
-                  <div class="solution-info-item i-zip"><span class="solution-label">邮编</span><input type="text" id="solAddrPostcode" class="solution-addr-input" placeholder="邮编"></div>
-                  <div class="solution-info-item i-country"><span class="solution-label">国家</span><input type="text" id="solAddrCountry" class="solution-addr-input" placeholder="国家"></div>
-                  <div class="solution-info-item i-state"><span class="solution-label">州/省</span><input type="text" id="solAddrState" class="solution-addr-input" placeholder="州/省"></div>
-                  <div class="solution-info-item i-city"><span class="solution-label">城市</span><input type="text" id="solAddrCity" class="solution-addr-input" placeholder="城市"></div>
-                  <div class="solution-info-item i-addr"><span class="solution-label">地址</span><input type="text" id="solAddrLine2" class="solution-addr-input" placeholder="地址"></div>
+                <div class="solution-addr-block solution-addr-new">
+                  <div class="solution-addr-title">新地址信息</div>
+                  <div class="solution-addr-box">
+                    <div class="solution-info-item i-name"><span class="solution-label">姓名</span><input type="text" id="solAddrName" class="solution-addr-input" placeholder="姓名"></div>
+                    <div class="solution-info-item i-phone"><span class="solution-label">电话</span><input type="text" id="solAddrPhone" class="solution-addr-input" placeholder="电话"></div>
+                    <div class="solution-info-item i-zip"><span class="solution-label">邮编</span><input type="text" id="solAddrPostcode" class="solution-addr-input" placeholder="邮编"></div>
+                    <div class="solution-info-item i-country"><span class="solution-label">国家</span><input type="text" id="solAddrCountry" class="solution-addr-input" placeholder="国家"></div>
+                    <div class="solution-info-item i-state"><span class="solution-label">州/省</span><input type="text" id="solAddrState" class="solution-addr-input" placeholder="州/省"></div>
+                    <div class="solution-info-item i-city"><span class="solution-label">城市</span><input type="text" id="solAddrCity" class="solution-addr-input" placeholder="城市"></div>
+                    <div class="solution-info-item i-addr"><span class="solution-label">新地址</span><input type="text" id="solAddrLine2" class="solution-addr-input" placeholder="地址"></div>
+                  </div>
                 </div>
               </div>
 
@@ -2614,6 +2702,7 @@
                   </div>
                   <input type="text" class="solution-addr-input" id="solExtraInput" placeholder="请输入" style="display:none;">
                 </div>
+              </div>
               </div>
 
             </div>
@@ -2692,7 +2781,7 @@
           const extraVal = (document.getElementById('solExtraSelect') || {}).value || '';
           const solLabel = extraVal ? `${selected.value}（${extraVal}）` : selected.value;
           openConfirmModal(function() {
-            alert(`✅ 已提交解决方案：${solLabel}`);
+            showToast(solutionIsChangeGlobal ? '变更成功' : '处理成功');
             closeSolutionModal();
           }, `确认提交【${solLabel}】解决方案？`);
         });
@@ -2718,6 +2807,57 @@
       function closeConfirmModal() {
         if (confirmModalInstance) confirmModalInstance.classList.remove('open');
         confirmModalHandler = null;
+      }
+
+      // ====== 变更拦截提示弹窗 ======
+      let changeBlockModalInstance = null;
+      function showChangeBlockAlert() {
+        if (!changeBlockModalInstance) createChangeBlockModal();
+        changeBlockModalInstance.classList.add('open');
+      }
+      function closeChangeBlockModal() {
+        if (changeBlockModalInstance) changeBlockModalInstance.classList.remove('open');
+      }
+      function createChangeBlockModal() {
+        changeBlockModalInstance = document.createElement('div');
+        changeBlockModalInstance.className = 'modal-overlay';
+        changeBlockModalInstance.id = 'changeBlockModal';
+        changeBlockModalInstance.innerHTML = `
+          <div class="modal-content confirm-modal">
+            <div class="confirm-body">
+              <i class="fas fa-exclamation-circle confirm-icon"></i>
+              <p class="confirm-text">该工单当前状态无法进行变更，如有问题可联系YWE客户</p>
+            </div>
+            <div class="confirm-footer">
+              <button class="btn btn-primary" id="changeBlockBtn">关闭</button>
+            </div>
+          </div>
+        `;
+        document.body.appendChild(changeBlockModalInstance);
+        document.getElementById('changeBlockBtn').addEventListener('click', closeChangeBlockModal);
+        changeBlockModalInstance.addEventListener('click', function(e) {
+          if (e.target === this) closeChangeBlockModal();
+        });
+      }
+      window.showChangeBlockAlert = showChangeBlockAlert;
+
+      // ====== Toast 提示 ======
+      function showToast(msg) {
+        let toast = document.getElementById('appToast');
+        if (!toast) {
+          toast = document.createElement('div');
+          toast.id = 'appToast';
+          toast.className = 'toast';
+          document.body.appendChild(toast);
+        }
+        toast.innerHTML = '<span class="toast-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>' + '<span>' + msg + '</span>';
+        // 强制回流后重新播放动画
+        void toast.offsetWidth;
+        toast.classList.add('show');
+        clearTimeout(toast._timer);
+        toast._timer = setTimeout(function() {
+          toast.classList.remove('show');
+        }, 1800);
       }
 
       function createConfirmModal() {
@@ -3021,7 +3161,8 @@
             address: addresses[i % 4],
             receiverName: receivers[i % 10],
             receiverPhone: `+1 (213) 555-0${String(i).padStart(2, '0')}`,
-            remark: remarks[i % 5]
+            remark: remarks[i % 5],
+            deliveryCount: 1 + (i % 3)
           };
           // 已处理订单生成 5~6 条解决方案记录
           if (status === '已处理') {
@@ -3346,7 +3487,7 @@
           if (!tbody || !thead) return;
 
           // 构建表头（所有tab一致）
-          const headers = ['订单号', '运单号', '异常原因', '制单仓', '制单日期', '创建时间', '截止时间', '处理状态', '工单号', '操作'];
+          const headers = ['订单号', '运单号', '异常原因', '派送次数', '制单仓', '制单日期', '创建时间', '截止时间', '处理状态', '工单号', '操作'];
           const sortableMap = {
             '异常原因': 'abnormalReason',
             '制单日期': 'createDate',
@@ -3368,7 +3509,7 @@
           // 渲染行
           let bodyHtml = '';
           if (pageData.length === 0) {
-            bodyHtml = `<tr><td colspan="10" style="text-align:center;padding:40px 0;color:#9aa1ad;">暂无数据</td></tr>`;
+            bodyHtml = `<tr><td colspan="11" style="text-align:center;padding:40px 0;color:#9aa1ad;">暂无数据</td></tr>`;
           } else {
             pageData.forEach(item => {
               const solJson = JSON.stringify({
@@ -3381,6 +3522,7 @@
                 deadlineTime: item.deadlineTime,
                 status: item.status,
                 workOrderNo: item.workOrderNo,
+                deliveryCount: item.deliveryCount,
                 address: item.address,
                 receiverName: item.receiverName,
                 receiverPhone: item.receiverPhone,
@@ -3388,11 +3530,17 @@
               }).replace(/"/g, '&quot;');
               const handled = item.status === '已处理';
               const solText = handled ? '变更' : '处理';
+              // 指定单号（UL455773495YP001）变更时拦截提示
+              const changeBlocked = handled && item.orderNo === 'UL455773495YP001';
+              const solBtn = changeBlocked
+                ? `<button class="action-btn primary text" onclick="window.showChangeBlockAlert()">${solText}</button>`
+                : `<button class="action-btn primary text" data-sol='${solJson}' onclick="window.openSolutionModal(JSON.parse(this.dataset.sol), ${handled})">${solText}</button>`;
               bodyHtml += `
                 <tr>
                   <td>${item.orderNo}</td>
                   <td>${item.trackingNo}</td>
                   <td>${item.abnormalReason}</td>
+                  <td>${item.deliveryCount}</td>
                   <td>${item.warehouse}</td>
                   <td>${item.createDate}</td>
                   <td>${item.createTime.slice(0, 10)}</td>
@@ -3400,7 +3548,7 @@
                   <td>${item.status}</td>
                   <td>${item.workOrderNo}</td>
                   <td class="sticky-right-cell">
-                    <button class="action-btn primary text" data-sol='${solJson}' onclick="window.openSolutionModal(JSON.parse(this.dataset.sol), ${handled})">${solText}</button>
+                    ${solBtn}
                     ${handled ? `<button class="action-btn primary text" style="margin-left:10px;" onclick="window.openRecordModal('${item.orderNo}')">记录</button>` : ''}
                   </td>
                 </tr>`;
